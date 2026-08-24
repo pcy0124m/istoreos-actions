@@ -1,6 +1,6 @@
 名称: 构建 iStore OS 24.10
 触发条件:
-这是 GitHub 仓库页面，标题为“.github/workflows/build-istoreos-25.10.yml · 工作流运行 · pcy0124m/istoreos-actions”。上下文。
+这是 GitHub 仓库页面，标题为“.github/workflows/build-istoreos.yml · 工作流运行 · pcy0124m/istoreos-actions”。上下文。
  workflow_dispatch:
     inputs:
       lan_ip:
@@ -24,18 +24,18 @@
 env:
  REPO_URL: https://github.com/istoreos/istoreos
   FEEDS_CONF: fcripts/diy-part1.sh
-  配置文件: .config
-  DIY_P1_SH: scripts/diy-part1.sh
-  DIY_P2_SH: scripts/diy-part2.sh
-  WORK_DIR: /mnt/workdir
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
-  TZ: Asia/Shanghai
+ 配置文件: .config
+ DIY_P1_SH: scripts/diy-part1.sh
+ DIY_P2_SH: scripts/diy-part2.sh
+ WORK_DIR: /mnt/workdir
+  UPLOAD_BIN_DIR: t真
+  上传固件: 真
+  UPLOAD_RELEASE: t真
+ 时区: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+: ${{ matrix.os }}
     strategy:
       matrix:
         REPO_BRANCH:
@@ -47,12 +47,12 @@ jobs:
       fail-fast: false
     steps:
       - name: 准备完成
-        uses: actions/checkout@v4
+        使用: actions/checkout@v4
 
       - name: 检查服务器配置
         run: |
           echo "若分配的服务器性能不足，务必及时取消，重新运行！"
-          echo -e "------------------------------- CPU信息 -------------------------------\n"
+          输出 -e "------------------------------- CPU信息 -------------------------------\n"
           输出 "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
           echo -e "CPU核心及版本信息: $(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
           echo -e "------------------------------- 内存信息 -------------------------------\n"
