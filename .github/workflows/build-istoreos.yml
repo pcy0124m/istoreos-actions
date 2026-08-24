@@ -1,12 +1,12 @@
-name: Build iStore OS 24.10
-on:
-  repository_dispatch:
-  workflow_dispatch:
+名称: 构建 iStore OS 24.10
+触发条件:
+ repository_dispatch:
+ workflow_dispatch:
     inputs:
       lan_ip:
-        description: '设置LAN IP地址'
+        描述: “设置局域网IP地址”
         required: true
-        default: '192.168.10.1'
+        默认值: '192.168.10.1'
       os_name:
         description: '设置系统名称'
         required: true
@@ -15,11 +15,11 @@ on:
         description: '启用WiFi'
         required: true
         default: false
-        type: boolean
+        类型: 布尔值
       ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
+        描述: '通过SSH连接到Actions'
+: 否
+        默认值: 'false'
 
 env:
   REPO_URL: https://github.com/istoreos/istoreos
