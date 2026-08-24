@@ -20,7 +20,7 @@ on:
         描述：通过 SSH 连接到 Actions
         必填项：否
         默认值：'false'
- schedule：
+计划：
  - cron：0 16 * * *
 
 env：
@@ -28,7 +28,7 @@ env：
  FEEDS_CONF：feeds.conf
  CONFIG_FILE：.config
  DIY_P1_SH：scripts/diy-part1.sh
- DIY_P2_SH：scripts/diy-part2.sh
+DIY_P2_SH：scripts/diy-part2.sh
  WORK_DIR：/mnt/workdir
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
