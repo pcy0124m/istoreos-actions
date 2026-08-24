@@ -1,1 +1,262 @@
+名称：构建 iStore OS 25.10
+触发条件:
+ repository_dispatch:
+ workflow_dispatch:
+    inputs:
+      局域网IP:
+        描述：'设置局域网IP地址'
 
+        默认值：'192.168.12.1'
+      操作系统名称:
+        description: '设置系统名称'
+        必需：true
+        默认值：'iStore OS'
+      enable_wifi:
+        description: '启用WiFi'
+        必需：true
+        default: false
+        type: boolean
+      ssh:
+        描述：通过 SSH 连接到 Actions
+        必填项：否
+        默认值：'false'
+ schedule：
+ - cron：0 16 * * *
+
+env：
+ REPO_URL：https://github.com/istoreos/istoreos
+ FEEDS_CONF：feeds.conf
+ CONFIG_FILE：.config
+ DIY_P1_SH：scripts/diy-part1.sh
+ DIY_P2_SH：scripts/diy-part2.sh
+ WORK_DIR：/mnt/workdir
+  UPLOAD_BIN_DIR: true
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+ GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    strategy:
+      matrix:
+        REPO_BRANCH:
+          - istoreos-25.10
+        架构:
+          - mt7621-sp-01b-25.10
+        操作系统：
+          - ubuntu-24.04
+      fail-fast: false
+
+    步骤：
+    - name: 检出仓库
+      uses: actions/checkout@v4
+
+    - name: 检查服务器配置
+      run: |
+        echo "若分配的服务器性能不足，务必及时取消，重新运行！"
+        echo -e "------------------------------- CPU信息 -------------------------------\n"
+        echo "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
+        echo -e "CPU核心及版本信息: $(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
+        echo -e "------------------------------- 内存信息 -------------------------------\n"
+        echo "已安装内存详细信息: "
+        sudo lshw -short -C memory | grep GiB || true
+        echo -e "\n"
+        echo -e "------------------------------- 磁盘信息 -------------------------------\n"
+        echo -e "磁盘数量: $(ls /dev/sd* 2>/dev/null | grep -v [1-9] | wc -l) \n"
+        echo "------------------------------- 磁盘详情 -------------------------------\n"
+        df -Th
+
+    - name: 初始化编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        echo "------------------------------- 更新并安装依赖 -------------------------------"
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(cat $GITHUB_WORKSPACE/depends/${{ matrix.os }})
+        sudo python3 -m pip install --break-system-packages pyelftools
+        echo "------------------------------- 清理Docker镜像和软件 -------------------------------"
+        docker images -q | xargs -r docker rmi 2>/dev/null || true
+        docker image prune -a -f
+        sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snapd* android* || true
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        echo "------------------------------- 设置工作目录及时区 -------------------------------"
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /mnt/workdir
+        sudo chown $USER:$USER /mnt/workdir
+
+    - name: 克隆源码
+      working-directory: /mnt/workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b ${{ matrix.REPO_BRANCH }} openwrt
+        ln -sf /mnt/workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: 缓存构建动作
+      uses: klever1988/cachewrtbuild@main
+      with:
+        ccache: 'true'
+        mixkey: ${{ matrix.os }}-${{ matrix.ARCHITECTURE }}-${{ matrix.REPO_BRANCH }}
+        prefix: ${{ github.workspace }}/openwrt
+
+    - name: 加载自定义 feeds
+      env:
+        FEEDS_CONF_PATH: ${{ matrix.ARCHITECTURE }}/${{ env.FEEDS_CONF }}
+      run: |
+        [ -e $FEEDS_CONF_PATH ] && mv $FEEDS_CONF_PATH openwrt/$FEEDS_CONF
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: 更新 feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: 安装 feeds
+      run: cd openwrt && ./scripts/feeds install -a
+
+    - name: 加载自定义配置
+      env:
+        CONFIG_FILE_PATH: ${{ matrix.ARCHITECTURE }}/${{ env.CONFIG_FILE }}
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE_PATH ] && mv $CONFIG_FILE_PATH openwrt/$CONFIG_FILE
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH ${{ matrix.REPO_BRANCH }} ${{ matrix.ARCHITECTURE }}
+
+    - name: 设置LAN IP地址（路由器登录地址）
+      run: |
+        cd openwrt
+        SET_IP=${{ github.event.inputs.lan_ip }}
+        if [ -z "$SET_IP" ]; then
+            SET_IP="192.168.12.1"
+        fi
+        sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
+        echo "设置局域网IP地址：$SET_IP"
+
+    - name: 设置系统名称
+      run: |
+        cd openwrt
+        set_os_name="${{ github.event.inputs.os_name }}"
+        if [ -z "$set_os_name" ]; then
+            set_os_name="iStore OS"
+        fi
+        sed -i "s/OpenWrt/${set_os_name}/g" package/base-files/files/bin/config_generate
+        echo "设置操作系统名称：${set_os_name}"
+
+    - name: 启用WiFi
+      if: github.event.inputs.enable_wifi == 'true'
+      run: |
+        cd openwrt
+        sed -i 's/disabled=1/disabled=0/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
+
+    - name: SSH 连接到 Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+    - name: 下载软件包
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 编译固件
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: 检查磁盘空间
+      if: (!cancelled())
+      run: df -hT
+
+    - name: 上传 bin 文件夹
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      with:
+        名称：OpenWrt_bin${{ env.FILE_DATE }}_${{matrix.ARCHITECTURE}}
+        路径：openwrt/bin
+
+    - name: 整理固件文件
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: 上传固件目录
+      uses: actions/upload-artifact@v4
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_firmware${{ env.FILE_DATE }}_${{matrix.ARCHITECTURE}}
+        路径：${{ env.FIRMWARE }}
+
+    - 名称：生成发布标签
+      id: 标签
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      运行: |
+        TIMESTAMP=$(date +"%Y%m%d_%H%M")
+        RELEASE_TAG="${{ matrix.ARCHITECTURE }}_${TIMESTAMP}"
+        echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+
+        SET_IP=${{ github.event.inputs.lan_ip }}
+        if [ -z "$SET_IP" ]; then
+            SET_IP="192.168.12.1"
+        fi
+        cat > release.txt <<EOF
+💻 架构: ${{ matrix.ARCHITECTURE }}
+📦 设备：京东云 RE‑SP‑01B MT7621（仅mt7621‑sp‑01b‑24.10）
+📂 源码: ${{ env.REPO_URL }}
+🌳 分支: ${{ matrix.REPO_BRANCH }}
+⏱️ 编译时间: $(date +"%Y年%m月%d日%H时%M分")
+: ${SET_IP}
+用户名
+🔒 密码: 123456
+
+📒 说明:
+单网口设备默认网口为LAN（旁路由模式），需要接入主路由器后进后台查找对应IP地址访问。
+双网口及以上设备，默认网口为WAN+LAN（主路由模式），接入LAN可直接访问。
+
+⚠️京东云RE‑SP‑01B注意：
+原厂刷入优先使用sysupgrade‑factory.bin；已经是OpenWrt/iStoreOS直接sysupgrade.bin。
+EOF
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - 名称: 自动将固件发布到 Releases动发布固件到 Releases
+使用: softprops/action-gh-release@v2
+如果steps.tag.outputs.status == 'success' && !cancelled()
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+: ${{ env.FIRMWARE }}/*
+: ${{ env.GITHUB_TOKEN }}
+
+    - name: 删除运行记录
+      使用: GitRML/delete-workflow-runs@main
+      with:
+        retain_days: 1
+        keep_minimum_runs: 3
+        令牌: ${{ env.GITHUB_TOKEN }}
+
+    - 名称: 删除自动发布的旧固件
+      使用: dev-drprasad/delete-older-releases@v0.2.0
+      如果: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        保留最新版本: 6
+        删除标签: true
+      环境:
+ env.GITHUB_TOKEN }
