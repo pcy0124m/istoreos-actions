@@ -1,12 +1,12 @@
-name: Build iStore OS 24.10
-on:
-  repository_dispatch:
-  workflow_dispatch:
+名称: 构建 iStore OS 24.10
+触发条件:
+这是 GitHub 仓库页面，标题为“.github/workflows/build-istoreos-25.10.yml · 工作流运行 · pcy0124m/istoreos-actions”。上下文。
+ workflow_dispatch:
     inputs:
       lan_ip:
-        description: '设置LAN IP地址'
+        描述: '设置LAN IP地址'
         required: true
-        default: '192.168.10.1'
+        默认值: '192.168.10.1'
       os_name:
         description: '设置系统名称'
         required: true
@@ -15,18 +15,16 @@ on:
         description: '启用WiFi'
         required: true
         default: false
-        type: boolean
+        类型: 布尔值
       ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
-  schedule:
-    - cron: 0 16 * * *
+        描述: '通过SSH连接到Actions'
+        必填: 否
+        默认值: 'false'
 
 env:
-  REPO_URL: https://github.com/istoreos/istoreos
-  FEEDS_CONF: feeds.conf
-  CONFIG_FILE: .config
+ REPO_URL: https://github.com/istoreos/istoreos
+  FEEDS_CONF: fcripts/diy-part1.sh
+  配置文件: .config
   DIY_P1_SH: scripts/diy-part1.sh
   DIY_P2_SH: scripts/diy-part2.sh
   WORK_DIR: /mnt/workdir
@@ -43,9 +41,6 @@ jobs:
         REPO_BRANCH:
           - istoreos-24.10
         ARCHITECTURE:
-          - rk33xx-24.10
-          - rk35xx-24.10
-          - x86-24.10
           - mt7621-sp-01b-24.10
         os:
           - ubuntu-24.04
@@ -58,7 +53,7 @@ jobs:
         run: |
           echo "若分配的服务器性能不足，务必及时取消，重新运行！"
           echo -e "------------------------------- CPU信息 -------------------------------\n"
-          echo "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
+          输出 "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
           echo -e "CPU核心及版本信息: $(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
           echo -e "------------------------------- 内存信息 -------------------------------\n"
           echo "已安装内存详细信息: "
@@ -158,7 +153,7 @@ jobs:
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: 下载软件包
         id: package
@@ -218,31 +213,31 @@ jobs:
               SET_IP="192.168.10.1"
           fi
 
-          cat > release.txt <<EOF
-💻 架构: ${{ matrix.ARCHITECTURE }}
-📂 源码: ${{ env.REPO_URL }}
-🌳 分支: ${{ matrix.REPO_BRANCH }}
-⏱️ 编译时间: $(date +"%Y年%m月%d日%H时%M分")
-管理地址: ${SET_IP}
+          cat > release.txt <<'EOF'
+💻 架构: mt7621-sp-01b-24.10
+📂 源码: https://github.com/istoreos/istoreos
+🌳 分支: istoreos-24.10
+⏱️ 编译时间: {{CURR_TIME}}
+🌐 管理地址: {{SET_IP}}
 用户名: root
 🔒 密码: password
 📒 说明:
 单网口设备默认网口为LAN（旁路由模式），需要接入主路由器后进后台查找对应IP地址访问。
 双网口及以上设备，默认网口为WAN+LAN（主路由模式），接入LAN可直接访问。
+⚠️京东云RE‑SP‑01B刷机提示：
+1.Breed全新刷机使用 factory.bin，不要使用sysupgrade.bin
+2.系统内升级使用 sysupgrade.bin
+3.刷机前务必备份 Breed 里 factory(Eeprom)无线校准分区，否则WiFi无信号
 EOF
-          # 京东云RE‑SP‑01B专属提示
-          if [[ "${{ matrix.ARCHITECTURE }}" == "mt7621-sp-01b-24.10" ]];then
-            echo "⚠️京东云RE‑SP‑01B刷机提示：" >> release.txt
-            echo "1.Breed全新刷机使用 factory.bin，不要使用sysupgrade.bin" >> release.txt
-            echo "2.系统内升级使用 sysupgrade.bin" >> release.txt
-            echo "3.刷机前务必备份 Breed 里 factory(Eeprom)无线校准分区，否则WiFi无信号" >> release.txt
-          fi
+          #替换变量
+          sed -i "s|{{CURR_TIME}}|$(date +"%Y年%m月%d日%H时%M分")|g" release.txt
+          sed -i "s|{{SET_IP}}|${SET_IP}|g" release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: 自动发布固件到 Releases
         uses: softprops/action-gh-release@v2
-        if: steps.tag.outputs.status == 'success' && !cancelled()
-        with:
+: 'success' && !cancelled()
+        使用
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
           文件: ${{ env.FIRMWARE }}/*
@@ -253,14 +248,15 @@ EOF
         使用: GitRML/delete-workflow-runs@main
         with:
           保留天数: 1
-          keep_minimum_runs: 3
-          token: ${{ secrets.GITHUB_TOKEN }}
+          保留最少运行次数: 3
+          令牌: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 删除自动发布的旧固件
+      - 名称: 删除自动发布的旧固件
         使用: dev-drprasad/delete-older-releases@v0.2.0
         如果: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          保留最新版本: 6
+          keep_latest: 6
           delete_tag: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
