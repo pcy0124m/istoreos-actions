@@ -2,29 +2,29 @@
 # iStoreOS 24.10 固件云编译 — 京东云 RE-SP-01B
 # 优化版 v2.0
 # ============================================================
-名称: 为京东云 RE-SP-01B 构建 iStoreOS 24.10
+name: Build iStoreOS 24.10 for JDCloud RE-SP-01B
 
-开启:
+on:
   workflow_dispatch:
-    输入:
+    inputs:
       lan_ip:
-        描述: '设置 LAN IP 地址'
-        必填: 是
-        默认值: '192.168.10.1'
+        description: '设置 LAN IP 地址'
+        required: true
+        default: '192.168.10.1'
       os_name:
-        描述: '设置系统名称'
-        必填: 是
-        默认值: 'iStore OS'
-      启用Wi-Fi:
-        描述: '启用 WiFi'
-        必填: 是
-        默认值: false
-        类型: 布尔值
+        description: '设置系统名称'
+        required: true
+        default: 'iStore OS'
+      enable_wifi:
+        description: '启用 WiFi'
+        required: true
+        default: false
+        type: boolean
       ssh:
-        描述: 'SSH 远程调试'
-        是否必填: false
-        默认值: 'false'
-  调度:
+        description: 'SSH 远程调试'
+        required: false
+        default: 'false'
+  schedule:
     - cron: 0 16 * * *
 
 env:
@@ -169,31 +169,31 @@ jobs:
       # ----------------------------------------------------------
       # 12. 上传编译日志（无论成功失败都传）
       # ----------------------------------------------------------
-      - 名称: 上传构建日志
-        如果: 始终()
-        使用: actions/upload-artifact@v4
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-：istoreos-build-logs
-          路径: |
+          name: istoreos-build-logs
+          path: |
             openwrt/build.log
             openwrt/build-single.log
-          保留天数: 30
+          retention-days: 30
 
       # ----------------------------------------------------------
       # 13. 上传固件（仅编译成功时）
       # ----------------------------------------------------------
-      - 名称: 上传固件
-使用: actions/upload-artifact@v4
-        如果: steps.compile.outputs.status == 'success'
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.status == 'success'
         with:
-          名称: istoreos-firmware
-          路径: openwrt/bin/targets/
-          保留天数: 90
+          name: istoreos-firmware
+          path: openwrt/bin/targets/
+          retention-days: 90
 
       # ----------------------------------------------------------
       # 14. SSH 远程调试（手动触发时启用）
       # ----------------------------------------------------------
-      - 名称: 设置SSH调试
-        使用: mxschmitt/action-tmate@v3
-        如果: ${{ github.event.inputs.ssh == 'true' }}
-        超时时间（分钟）：30
+      - name: Setup SSH debug
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event.inputs.ssh == 'true' }}
+        timeout-minutes: 30
