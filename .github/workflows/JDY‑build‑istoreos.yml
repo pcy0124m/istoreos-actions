@@ -109,12 +109,27 @@ jobs:
         working-directory: ./
 
       # ----------------------------------------------------------
-      # 7. 更新 & 安装 feeds
+      # 7. 更新 & 安装 feeds（自动移除有问题的包）
       # ----------------------------------------------------------
       - name: Update & Install feeds
         run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          # 更新 feeds（克隆所有源）
+          ./scripts/feeds update -a || true
+          
+          # 移除有问题的包（上游 Makefile 语法错误，暂时跳过）
+          # 1. linkease_nas_luci 中的坏包
+          for bad_pkg in luci-mod-istorenext luci-nginxer; do
+            pkg_dir="feeds/linkease_nas_luci/luci/$bad_pkg"
+            if [ -d "$pkg_dir" ]; then
+              echo "⚠️ 移除有问题的包: $pkg_dir"
+              rm -rf "$pkg_dir"
+            fi
+          done
+          
+          # 安装 feeds（跳过已移除的坏包）
+          ./scripts/feeds install -a || true
+          
+          echo "✅ Feeds 更新完成"
         working-directory: ./openwrt
 
       # ----------------------------------------------------------
