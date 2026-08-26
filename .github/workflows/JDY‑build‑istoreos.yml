@@ -1,10 +1,14 @@
-name: JDY‑Build iStore OS 24.10
+# ============================================================
+# iStoreOS 24.10 固件云编译 — 京东云 RE-SP-01B
+# 优化版 v2.0
+# ============================================================
+name: Build iStoreOS 24.10 for JDCloud RE-SP-01B
+
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       lan_ip:
-        description: '设置LAN IP地址'
+        description: '设置 LAN IP 地址'
         required: true
         default: '192.168.10.1'
       os_name:
@@ -12,16 +16,16 @@ on:
         required: true
         default: 'iStore OS'
       enable_wifi:
-        description: '启用WiFi'
+        description: '启用 WiFi'
         required: true
         default: false
         type: boolean
       ssh:
-        description: 'SSH connection to Actions'
+        description: 'SSH 远程调试'
         required: false
         default: 'false'
   schedule:
-   - cron: 0 16 * * *
+    - cron: 0 16 * * *
 
 env:
   REPO_URL: https://github.com/istoreos/istoreos
@@ -33,58 +37,151 @@ env:
   TZ: Asia/Shanghai
 
 jobs:
-  build:
+  build-istoreos:
     runs-on: ubuntu-22.04
+
     steps:
-      - name: Checkout current repo
+      # ----------------------------------------------------------
+      # 1. 检出仓库
+      # ----------------------------------------------------------
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # ----------------------------------------------------------
+      # 2. 安装编译依赖
+      # ----------------------------------------------------------
       - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential gcc g++ binutils bzip2 flex bison autoconf automake make cmake libncurses-dev libz-dev libssl-dev git curl wget unzip time rsync python3 python3-pip
+          # 腾出磁盘空间
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/hostedtoolcache
 
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc g++ binutils bzip2 flex bison \
+            autoconf automake make cmake libncurses-dev libz-dev libssl-dev git curl \
+            wget unzip time rsync python3 python3-pip
+
+      # ----------------------------------------------------------
+      # 3. 克隆 iStoreOS 源码
+      # ----------------------------------------------------------
       - name: Clone iStoreOS source
         run: |
           git clone --depth 1 -b ${{ env.REPO_BRANCH }} ${{ env.REPO_URL }} openwrt
-          cd openwrt
 
+      # ----------------------------------------------------------
+      # 4. 传递用户输入参数到编译脚本
+      # ----------------------------------------------------------
+      - name: Pass inputs to build scripts
+        run: |
+          echo "LAN_IP=${{ github.event.inputs.lan_ip || '192.168.10.1' }}" >> $GITHUB_ENV
+          echo "OS_NAME=${{ github.event.inputs.os_name || 'iStore OS' }}" >> $GITHUB_ENV
+          echo "ENABLE_WIFI=${{ github.event.inputs.enable_wifi || 'false' }}" >> $GITHUB_ENV
+
+      # ----------------------------------------------------------
+      # 5. DIY Part1 — 源码层面的自定义修改
+      # ----------------------------------------------------------
       - name: DIY Part1
         run: |
           chmod +x ./${{ env.DIY_P1_SH }}
           ./${{ env.DIY_P1_SH }}
         working-directory: ./
 
-      - name: Copy feeds.conf and .config
+      # ----------------------------------------------------------
+      # 6. 复制 feeds 配置和 .config
+      # ----------------------------------------------------------
+      - name: Copy config files
         run: |
           cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
           cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
         working-directory: ./
 
+      # ----------------------------------------------------------
+      # 7. 更新 & 安装 feeds
+      # ----------------------------------------------------------
       - name: Update & Install feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
         working-directory: ./openwrt
 
+      # ----------------------------------------------------------
+      # 8. DIY Part2 — 配置层面的自定义修改
+      # ----------------------------------------------------------
       - name: DIY Part2
         run: |
           chmod +x ../${{ env.DIY_P2_SH }}
           ../${{ env.DIY_P2_SH }}
         working-directory: ./openwrt
 
-      - name: Download source code
-        run: |
-          make download -j$(nproc)
-        working-directory: ./openwrt
+      # ----------------------------------------------------------
+      # 9. 缓存 dl 目录（加速后续编译）
+      # ----------------------------------------------------------
+      - name: Cache dl
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: dl-${{ hashFiles('openwrt/.config') }}
+          restore-keys: |
+            dl-
 
+      # ----------------------------------------------------------
+      # 10. 下载软件包（带重试 + 不完整文件清理）
+      # ----------------------------------------------------------
+      - name: Download source
+        id: download
+        run: |
+          cd openwrt
+          make download -j$(nproc) || make download -j1 V=s
+          # 清理小于 1KB 的不完整文件，重新下载
+          find dl -size -1024c -exec ls -la {} \;
+          find dl -size -1024c -exec rm -f {} \;
+          make download -j1
+          echo "dl_ready=true" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------
+      # 11. 编译固件
+      # ----------------------------------------------------------
       - name: Compile firmware
+        id: compile
         run: |
-          make -j$(nproc) || make -j1 V=s
-        working-directory: ./openwrt
+          cd openwrt
+          make -j$(nproc) 2>&1 | tee build.log || {
+            echo "===== 多线程编译失败，切换到单线程重试 ====="
+            make -j1 V=s 2>&1 | tee build-single.log
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          }
+          echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware artifact
+      # ----------------------------------------------------------
+      # 12. 上传编译日志（无论成功失败都传）
+      # ----------------------------------------------------------
+      - name: Upload build logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: iStoreOS-firmware
+          name: istoreos-build-logs
+          path: |
+            openwrt/build.log
+            openwrt/build-single.log
+          retention-days: 30
+
+      # ----------------------------------------------------------
+      # 13. 上传固件（仅编译成功时）
+      # ----------------------------------------------------------
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.status == 'success'
+        with:
+          name: istoreos-firmware
           path: openwrt/bin/targets/
+          retention-days: 90
+
+      # ----------------------------------------------------------
+      # 14. SSH 远程调试（手动触发时启用）
+      # ----------------------------------------------------------
+      - name: Setup SSH debug
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event.inputs.ssh == 'true' }}
+        timeout-minutes: 30
