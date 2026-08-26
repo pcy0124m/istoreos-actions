@@ -35,15 +35,15 @@ env:
   UPLOAD_RELEASE: false
   TZ: Asia/Shanghai
 
-作业:
+jobs:
   build:
     runs-on: ubuntu-22.04
-步骤:
-      - 名称: 检出代码
-用途: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - 名称: 设置构建环境
-        使用: istoreos/build-actions@main
+      - name: Setup Build Environment
+        uses: istoreos/build-actions@main
         with:
           repo_url: ${{ env.REPO_URL }}
           repo_branch: ${{ env.REPO_BRANCH }}
@@ -53,6 +53,5 @@ env:
           diy_p2_sh: ${{ env.DIY_P2_SH }}
           upload_bin_dir: ${{ env.UPLOAD_BIN_DIR }}
           upload_firmware: ${{ env.UPLOAD_FIRMWARE }}
-          上传发布: ${{ env.UPLOAD_RELEASE }}
-          SSH: ${{ github.event.inputs.ssh }}
-
+          upload_release: ${{ env.UPLOAD_RELEASE }}
+          ssh: ${{ github.event.inputs.ssh }}
