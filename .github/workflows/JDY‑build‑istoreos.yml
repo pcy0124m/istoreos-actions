@@ -20,7 +20,6 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-# 调试阶段关闭定时，固件调通再打开
 # schedule:
 #   - cron: 0 16 * * *
 
@@ -38,10 +37,10 @@ env:
 
 作业:
   build:
-: ubuntu‑22.04
+    runs-on: ubuntu-22.04
 步骤:
       - 名称: 检出代码
-        用途: actions/checkout@v4
+用途: actions/checkout@v4
 
       - 名称: 设置构建环境
         使用: istoreos/build-actions@main
@@ -54,6 +53,6 @@ env:
           diy_p2_sh: ${{ env.DIY_P2_SH }}
           upload_bin_dir: ${{ env.UPLOAD_BIN_DIR }}
           upload_firmware: ${{ env.UPLOAD_FIRMWARE }}
-: ${{ env.UPLOAD_RELEASE }}
+          上传发布: ${{ env.UPLOAD_RELEASE }}
           SSH: ${{ github.event.inputs.ssh }}
 
