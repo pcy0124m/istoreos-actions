@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       lan_ip:
-        description: '设置局域网IP地址'
+        description: '设置LAN IP地址'
         required: true
-        default: '192.168.12.1'
+        default: '192.168.10.1'
       os_name:
         description: '设置系统名称'
         required: true
@@ -20,19 +20,16 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-# schedule:
-#   - cron: 0 16 * * *
+  schedule:
+   - cron: 0 16 * * *
 
 env:
   REPO_URL: https://github.com/istoreos/istoreos
   REPO_BRANCH: istoreos-24.10
-  FEEDS_CONF: mt7621-sp01b/feeds.conf
-  CONFIG_FILE: mt7621-sp01b/.config
-  DIY_P1_SH: scripts/diy-part1.sh
-  DIY_P2_SH: scripts/diy-part2.sh
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: false
+  FEEDS_CONF: feeds.conf
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
   TZ: Asia/Shanghai
 
 jobs:
@@ -42,8 +39,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Build Environment
-        uses: linkease/build-actions@main
+      - name: Build OpenWrt
+        uses: P3TERX/Actions-OpenWrt@main
         with:
           repo_url: ${{ env.REPO_URL }}
           repo_branch: ${{ env.REPO_BRANCH }}
@@ -51,7 +48,4 @@ jobs:
           config_file: ${{ env.CONFIG_FILE }}
           diy_p1_sh: ${{ env.DIY_P1_SH }}
           diy_p2_sh: ${{ env.DIY_P2_SH }}
-          upload_bin_dir: ${{ env.UPLOAD_BIN_DIR }}
-          upload_firmware: ${{ env.UPLOAD_FIRMWARE }}
-          upload_release: ${{ env.UPLOAD_RELEASE }}
           ssh: ${{ github.event.inputs.ssh }}
