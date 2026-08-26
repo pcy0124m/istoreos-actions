@@ -10,7 +10,7 @@ on:
       lan_ip:
         description: '设置 LAN IP 地址'
         required: true
-        default: '192.168.10.1'
+        default: '192.168.12.1'
       os_name:
         description: '设置系统名称'
         required: true
@@ -32,7 +32,6 @@ env:
   REPO_URL: https://github.com/istoreos/istoreos
   REPO_BRANCH: istoreos-24.10
   # 文件路径（指向仓库中对应子目录）
-  FEEDS_CONF: mt7621‑sp‑01b‑24.10/feeds.conf
   CONFIG_FILE: mt7621‑sp‑01b‑24.10/.config
   DIY_P1_SH: scripts/diy-part1.sh
   DIY_P2_SH: scripts/diy-part2.sh
@@ -96,19 +95,10 @@ jobs:
         working-directory: ./
 
       # ----------------------------------------------------------
-      # 6. 复制 feeds 配置和 .config
+      # 6. 复制 .config（并追加阿里云下载镜像）
       # ----------------------------------------------------------
-      - name: Copy config files & apply mirrors
+      - name: Copy config & apply mirrors
         run: |
-          # 复制 feeds 配置（如果存在）
-          # 注意：不替换 GitHub → Gitee，因为那些仓库在 Gitee 上不存在
-          # 下载加速由 diy-part1.sh 中的 ghproxy 处理
-          if [ -f "./${{ env.FEEDS_CONF }}" ]; then
-            cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
-          else
-            echo "⚠️ 未找到 ${{ env.FEEDS_CONF }}，跳过 feeds 配置复制"
-          fi
-
           # 复制 .config（如果存在），并追加阿里云下载镜像
           if [ -f "./${{ env.CONFIG_FILE }}" ]; then
             cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
