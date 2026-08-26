@@ -28,12 +28,9 @@ on:
     - cron: 0 16 * * *
 
 env:
-  # 主仓库源（国内用 Gitee 镜像加速，国外用 GitHub 原版）
-  REPO_URL: https://gitee.com/istoreos/istoreos
+  # 主仓库源（GitHub Actions 海外 runner 直连 GitHub 更快）
+  REPO_URL: https://github.com/istoreos/istoreos
   REPO_BRANCH: istoreos-24.10
-  # 如果 Gitee 镜像拉取失败，注释上面两行，取消注释下面两行：
-  # REPO_URL: https://github.com/istoreos/istoreos
-  # REPO_BRANCH: istoreos-24.10
   # 文件路径（指向仓库中对应子目录）
   FEEDS_CONF: mt7621‑sp‑01b‑24.10/feeds.conf
   CONFIG_FILE: mt7621‑sp‑01b‑24.10/.config
