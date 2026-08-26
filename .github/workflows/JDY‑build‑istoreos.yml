@@ -36,16 +36,55 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      - name: Checkout current repo
         uses: actions/checkout@v4
 
-      - name: Build OpenWrt
-        uses: P3TERX/Actions-OpenWrt@main
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc g++ binutils bzip2 flex bison autoconf automake make cmake libncurses-dev libz-dev libssl-dev git curl wget unzip time rsync python3 python3-pip
+
+      - name: Clone iStoreOS source
+        run: |
+          git clone --depth 1 -b ${{ env.REPO_BRANCH }} ${{ env.REPO_URL }} openwrt
+          cd openwrt
+
+      - name: DIY Part1
+        run: |
+          chmod +x ./${{ env.DIY_P1_SH }}
+          ./${{ env.DIY_P1_SH }}
+        working-directory: ./
+
+      - name: Copy feeds.conf and .config
+        run: |
+          cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
+          cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
+        working-directory: ./
+
+      - name: Update & Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+        working-directory: ./openwrt
+
+      - name: DIY Part2
+        run: |
+          chmod +x ../${{ env.DIY_P2_SH }}
+          ../${{ env.DIY_P2_SH }}
+        working-directory: ./openwrt
+
+      - name: Download source code
+        run: |
+          make download -j$(nproc)
+        working-directory: ./openwrt
+
+      - name: Compile firmware
+        run: |
+          make -j$(nproc) || make -j1 V=s
+        working-directory: ./openwrt
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
         with:
-          repo_url: ${{ env.REPO_URL }}
-          repo_branch: ${{ env.REPO_BRANCH }}
-          feeds_conf: ${{ env.FEEDS_CONF }}
-          config_file: ${{ env.CONFIG_FILE }}
-          diy_p1_sh: ${{ env.DIY_P1_SH }}
-          diy_p2_sh: ${{ env.DIY_P2_SH }}
-          ssh: ${{ github.event.inputs.ssh }}
+          name: iStoreOS-firmware
+          path: openwrt/bin/targets/
