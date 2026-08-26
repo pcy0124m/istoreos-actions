@@ -1,0 +1,24 @@
+触发条件:
+这是 GitHub 仓库页面，标题为“pcy0124m/istoreos-actions：使用 GitHub Actions 云编译 定制 iStore OS 固件”。上下文。:
+  workflow_dispatch:
+    输入:
+      lan_ip:
+        描述: '设置局域网IP地址'
+        必填: 是
+        默认值: '192.168.12.1'
+      os_name:
+        描述: '设置系统名称'
+        必填: 是
+        默认值: 'iStore OS'
+      启用Wi-Fi:
+        描述: '启用WiFi'
+        必填: 是
+        默认值: false
+        类型: 布尔值
+      ssh:
+        描述: '与 Actions 的 SSH 连接'
+        是否必填: 假
+        默认值: 'false'
+# 调试期间关闭定时自动编译，固件全部调通以后再解开
+# 计划：
+#   - cron: 0 16 * * *
