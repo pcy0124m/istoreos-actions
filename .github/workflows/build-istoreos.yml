@@ -6,7 +6,7 @@ on:
       lan_ip:
         description: '设置LAN IP地址'
         required: true
-        default: '192.168.10.1'
+        default: '192.168.12.1'
       os_name:
         description: '设置系统名称'
         required: true
@@ -20,7 +20,6 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-
 env:
   REPO_URL: https://github.com/istoreos/istoreos
   FEEDS_CONF: feeds.conf
@@ -32,7 +31,6 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -68,16 +66,28 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # 替换Azure源为阿里云国内镜像，解决apt超时
+          sudo sed -i 's#http://azure.archive.ubuntu.com#http://mirrors.aliyun.com#g' /etc/apt/sources.list
+          sudo apt-get clean
+
+          # 创建8G Swap分区，规避编译内存溢出
+          sudo dd if=/dev/zero of=/swapfile bs=1G count=8
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
           echo "------------------------------- 更新并安装依赖 -------------------------------"
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install $(cat $GITHUB_WORKSPACE/depends/${{ matrix.os }})
           sudo python3 -m pip install --break-system-packages pyelftools
+
           echo "------------------------------- 清理Docker镜像和软件 -------------------------------"
           docker images -q | xargs -r docker rmi 2>/dev/null || true
           docker image prune -a -f
           sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* moby* snapd* android* || true
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
+
           echo "------------------------------- 设置工作目录及时区 -------------------------------"
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /mnt/workdir
@@ -153,7 +163,7 @@ jobs:
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
       - name: 下载软件包
         id: package
@@ -207,12 +217,10 @@ jobs:
           TIMESTAMP=$(date +"%Y%m%d_%H%M")
           RELEASE_TAG="${{ matrix.ARCHITECTURE }}_${TIMESTAMP}"
           echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
-
           SET_IP=${{ github.event.inputs.lan_ip }}
           if [ -z "$SET_IP" ]; then
               SET_IP="192.168.10.1"
           fi
-
           cat > release.txt <<'EOF'
 💻 架构: mt7621-sp-01b-24.10
 📂 源码: https://github.com/istoreos/istoreos
