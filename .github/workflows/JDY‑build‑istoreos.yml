@@ -2,38 +2,44 @@
 # iStoreOS 24.10 固件云编译 — 京东云 RE-SP-01B
 # 优化版 v2.0
 # ============================================================
-name: Build iStoreOS 24.10 for JDCloud RE-SP-01B
+名称: 为京东云 RE-SP-01B 构建 iStoreOS 24.10
 
-on:
+开启:
   workflow_dispatch:
-    inputs:
+    输入:
       lan_ip:
-        description: '设置 LAN IP 地址'
-        required: true
-        default: '192.168.10.1'
+        描述: '设置 LAN IP 地址'
+        必填: 是
+        默认值: '192.168.10.1'
       os_name:
-        description: '设置系统名称'
-        required: true
-        default: 'iStore OS'
-      enable_wifi:
-        description: '启用 WiFi'
-        required: true
-        default: false
-        type: boolean
+        描述: '设置系统名称'
+        必填: 是
+        默认值: 'iStore OS'
+      启用Wi-Fi:
+        描述: '启用 WiFi'
+        必填: 是
+        默认值: false
+        类型: 布尔值
       ssh:
-        description: 'SSH 远程调试'
-        required: false
-        default: 'false'
-  schedule:
+        描述: 'SSH 远程调试'
+        是否必填: false
+        默认值: 'false'
+  调度:
     - cron: 0 16 * * *
 
 env:
-  REPO_URL: https://github.com/istoreos/istoreos
+  # 主仓库源（国内用 Gitee 镜像加速，国外用 GitHub 原版）
+  REPO_URL: https://gitee.com/istoreos/istoreos
   REPO_BRANCH: istoreos-24.10
+  # 如果 Gitee 镜像拉取失败，注释上面两行，取消注释下面两行：
+  # REPO_URL: https://github.com/istoreos/istoreos
+  # REPO_BRANCH: istoreos-24.10
   FEEDS_CONF: feeds.conf
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
+  # 阿里云 OpenWrt 下载镜像（加速 make download）
+  ALIYUN_MIRROR: https://mirrors.aliyun.com/openwrt
   TZ: Asia/Shanghai
 
 jobs:
@@ -88,12 +94,17 @@ jobs:
         working-directory: ./
 
       # ----------------------------------------------------------
-      # 6. 复制 feeds 配置和 .config
+      # 6. 复制 feeds 配置和 .config（并替换为国内镜像源）
       # ----------------------------------------------------------
-      - name: Copy config files
+      - name: Copy config files & apply mirrors
         run: |
+          # 复制 feeds 配置，并将 github.com 替换为 gitee.com（国内镜像加速）
           cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
+          sed -i 's|https://github.com/|https://gitee.com/|g' ./openwrt/feeds.conf
+
+          # 复制 .config，并追加阿里云下载镜像
           cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
+          echo "CONFIG_MIRROR=\"${{ env.ALIYUN_MIRROR }}\"" >> ./openwrt/.config
         working-directory: ./
 
       # ----------------------------------------------------------
@@ -126,12 +137,13 @@ jobs:
             dl-
 
       # ----------------------------------------------------------
-      # 10. 下载软件包（带重试 + 不完整文件清理）
+      # 10. 下载软件包（阿里云镜像加速 + 重试 + 不完整文件清理）
       # ----------------------------------------------------------
       - name: Download source
         id: download
         run: |
           cd openwrt
+          # 阿里云镜像已在 .config 中配置为 CONFIG_MIRROR，自动加速下载
           make download -j$(nproc) || make download -j1 V=s
           # 清理小于 1KB 的不完整文件，重新下载
           find dl -size -1024c -exec ls -la {} \;
@@ -157,31 +169,31 @@ jobs:
       # ----------------------------------------------------------
       # 12. 上传编译日志（无论成功失败都传）
       # ----------------------------------------------------------
-      - name: Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v4
+      - 名称: 上传构建日志
+        如果: 始终()
+        使用: actions/upload-artifact@v4
         with:
-          name: istoreos-build-logs
-          path: |
+：istoreos-build-logs
+          路径: |
             openwrt/build.log
             openwrt/build-single.log
-          retention-days: 30
+          保留天数: 30
 
       # ----------------------------------------------------------
       # 13. 上传固件（仅编译成功时）
       # ----------------------------------------------------------
-      - name: Upload firmware
-        uses: actions/upload-artifact@v4
-        if: steps.compile.outputs.status == 'success'
+      - 名称: 上传固件
+使用: actions/upload-artifact@v4
+        如果: steps.compile.outputs.status == 'success'
         with:
-          name: istoreos-firmware
-          path: openwrt/bin/targets/
-          retention-days: 90
+          名称: istoreos-firmware
+          路径: openwrt/bin/targets/
+          保留天数: 90
 
       # ----------------------------------------------------------
       # 14. SSH 远程调试（手动触发时启用）
       # ----------------------------------------------------------
-      - name: Setup SSH debug
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event.inputs.ssh == 'true' }}
-        timeout-minutes: 30
+      - 名称: 设置SSH调试
+        使用: mxschmitt/action-tmate@v3
+        如果: ${{ github.event.inputs.ssh == 'true' }}
+        超时时间（分钟）：30
