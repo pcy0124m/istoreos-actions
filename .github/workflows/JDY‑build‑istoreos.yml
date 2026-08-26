@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Build Environment
-        uses: istoreos/build-actions@main
+        uses: linkease/build-actions@main
         with:
           repo_url: ${{ env.REPO_URL }}
           repo_branch: ${{ env.REPO_BRANCH }}
