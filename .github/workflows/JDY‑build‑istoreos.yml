@@ -96,14 +96,15 @@ jobs:
         working-directory: ./
 
       # ----------------------------------------------------------
-      # 6. 复制 feeds 配置和 .config（并替换为国内镜像源）
+      # 6. 复制 feeds 配置和 .config
       # ----------------------------------------------------------
       - name: Copy config files & apply mirrors
         run: |
-          # 复制 feeds 配置（如果存在），并将 github.com 替换为 gitee.com
+          # 复制 feeds 配置（如果存在）
+          # 注意：不替换 GitHub → Gitee，因为那些仓库在 Gitee 上不存在
+          # 下载加速由 diy-part1.sh 中的 ghproxy 处理
           if [ -f "./${{ env.FEEDS_CONF }}" ]; then
             cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
-            sed -i 's|https://github.com/|https://gitee.com/|g' ./openwrt/feeds.conf
           else
             echo "⚠️ 未找到 ${{ env.FEEDS_CONF }}，跳过 feeds 配置复制"
           fi
