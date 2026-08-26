@@ -34,10 +34,11 @@ env:
   # 如果 Gitee 镜像拉取失败，注释上面两行，取消注释下面两行：
   # REPO_URL: https://github.com/istoreos/istoreos
   # REPO_BRANCH: istoreos-24.10
-  FEEDS_CONF: feeds.conf
-  CONFIG_FILE: .config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
+  # 文件路径（指向仓库中对应子目录）
+  FEEDS_CONF: mt7621‑sp‑01b‑24.10/feeds.conf
+  CONFIG_FILE: mt7621‑sp‑01b‑24.10/.config
+  DIY_P1_SH: scripts/diy-part1.sh
+  DIY_P2_SH: scripts/diy-part2.sh
   # 阿里云 OpenWrt 下载镜像（加速 make download）
   ALIYUN_MIRROR: https://mirrors.aliyun.com/openwrt
   TZ: Asia/Shanghai
@@ -85,12 +86,16 @@ jobs:
           echo "ENABLE_WIFI=${{ github.event.inputs.enable_wifi || 'false' }}" >> $GITHUB_ENV
 
       # ----------------------------------------------------------
-      # 5. DIY Part1 — 源码层面的自定义修改
+      # 5. DIY Part1 — 源码层面的自定义修改（文件不存在则跳过）
       # ----------------------------------------------------------
       - name: DIY Part1
         run: |
-          chmod +x ./${{ env.DIY_P1_SH }}
-          ./${{ env.DIY_P1_SH }}
+          if [ -f "./${{ env.DIY_P1_SH }}" ]; then
+            chmod +x ./${{ env.DIY_P1_SH }}
+            ./${{ env.DIY_P1_SH }}
+          else
+            echo "⚠️ 未找到 ${{ env.DIY_P1_SH }}，跳过 DIY Part1"
+          fi
         working-directory: ./
 
       # ----------------------------------------------------------
@@ -98,12 +103,20 @@ jobs:
       # ----------------------------------------------------------
       - name: Copy config files & apply mirrors
         run: |
-          # 复制 feeds 配置，并将 github.com 替换为 gitee.com（国内镜像加速）
-          cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
-          sed -i 's|https://github.com/|https://gitee.com/|g' ./openwrt/feeds.conf
+          # 复制 feeds 配置（如果存在），并将 github.com 替换为 gitee.com
+          if [ -f "./${{ env.FEEDS_CONF }}" ]; then
+            cp -f ./${{ env.FEEDS_CONF }} ./openwrt/feeds.conf
+            sed -i 's|https://github.com/|https://gitee.com/|g' ./openwrt/feeds.conf
+          else
+            echo "⚠️ 未找到 ${{ env.FEEDS_CONF }}，跳过 feeds 配置复制"
+          fi
 
-          # 复制 .config，并追加阿里云下载镜像
-          cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
+          # 复制 .config（如果存在），并追加阿里云下载镜像
+          if [ -f "./${{ env.CONFIG_FILE }}" ]; then
+            cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
+          else
+            echo "⚠️ 未找到 ${{ env.CONFIG_FILE }}，将使用 iStoreOS 默认配置"
+          fi
           echo "CONFIG_MIRROR=\"${{ env.ALIYUN_MIRROR }}\"" >> ./openwrt/.config
         working-directory: ./
 
@@ -117,12 +130,16 @@ jobs:
         working-directory: ./openwrt
 
       # ----------------------------------------------------------
-      # 8. DIY Part2 — 配置层面的自定义修改
+      # 8. DIY Part2 — 配置层面的自定义修改（文件不存在则跳过）
       # ----------------------------------------------------------
       - name: DIY Part2
         run: |
-          chmod +x ../${{ env.DIY_P2_SH }}
-          ../${{ env.DIY_P2_SH }}
+          if [ -f "../${{ env.DIY_P2_SH }}" ]; then
+            chmod +x ../${{ env.DIY_P2_SH }}
+            ../${{ env.DIY_P2_SH }} ${{ env.REPO_BRANCH }} mt7621-sp-01b-24.10
+          else
+            echo "⚠️ 未找到 ${{ env.DIY_P2_SH }}，跳过 DIY Part2"
+          fi
         working-directory: ./openwrt
 
       # ----------------------------------------------------------
