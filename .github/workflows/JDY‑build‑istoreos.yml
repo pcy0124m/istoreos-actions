@@ -191,20 +191,23 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          # 先用多线程快速编译（实时输出到日志）
-          set +e
+          # 先用多线程快速编译
           make -j$(nproc) 2>&1 | tee build.log
-          exit_code=${PIPESTATUS[0]}
-          echo "===== make 退出码: $exit_code ====="
-          echo "===== 打印 build.log 最后 80 行 ====="
-          tail -80 build.log
-          echo "====="
-          if [ $exit_code -ne 0 ]; then
-            echo "===== 多线程失败，切换到单线程 V=sc ====="
+          # 检查 build.log 中是否有错误（不依赖 PIPESTATUS）
+          if grep -q "Error 255\|Error 2\|Error 1" build.log 2>/dev/null; then
+            echo "===== ❌ build.log 中发现错误！切换到单线程 V=sc 详细模式 ====="
             make -j1 V=sc 2>&1 | tee build-single.log
-            echo "===== 单线程退出码: ${PIPESTATUS[0]} ====="
             echo "===== build-single.log 最后 80 行 ====="
             tail -80 build-single.log 2>/dev/null
+            echo "====="
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          # 再检查 make 退出码
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "===== make 退出码: $exit_code，build.log 最后 80 行 ====="
+            tail -80 build.log
             echo "====="
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
