@@ -193,9 +193,10 @@ jobs:
           cd openwrt
           # pipefail 确保 make 的错误返回值不被 tee 吞掉
           set -o pipefail
+          # 先用多线程快速编译，失败后用单线程 V=sc 显示详细错误
           make -j$(nproc) 2>&1 | tee build.log || {
-            echo "===== 多线程编译失败，切换到单线程重试 ====="
-            make -j1 V=s 2>&1 | tee build-single.log
+            echo "===== 多线程编译失败，切换到单线程 V=sc 详细模式 ====="
+            make -j1 V=sc 2>&1 | tee build-single.log
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           }
