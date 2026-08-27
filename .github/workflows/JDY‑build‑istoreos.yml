@@ -191,13 +191,21 @@ jobs:
         id: compile
         run: |
           cd openwrt
+          echo "===== 当前目录: $(pwd) ====="
+          echo "===== 开始编译 ====="
           # 多线程编译
           make -j$(nproc) 2>&1 | tee build.log
-          # 不管成功失败，先打印最后 80 行日志
+          # 检查 build.log 是否存在
+          echo "===== 检查 build.log ====="
+          ls -la build.log 2>&1
+          echo "===== build.log 大小: $(wc -c < build.log 2>/dev/null) bytes ====="
+          # 打印最后 80 行日志
           echo "========== build.log 最后 80 行 =========="
           tail -80 build.log
           echo "=========================================="
           # 检查固件是否生成（最可靠的判断方式）
+          echo "===== 检查固件文件 ====="
+          ls -la bin/targets/ramips/mt7621/ 2>&1
           firmware_count=$(ls -1 bin/targets/ramips/mt7621/*squashfs* 2>/dev/null | wc -l)
           if [ "$firmware_count" -gt 0 ]; then
             echo "✅ 固件已生成！共 $firmware_count 个文件"
