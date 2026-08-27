@@ -191,17 +191,18 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          # 先用多线程快速编译（重定向到文件，避免管道吞错误码）
-          make -j$(nproc) > build.log 2>&1
-          exit_code=$?
+          # 先用多线程快速编译（实时输出到日志）
+          make -j$(nproc) 2>&1 | tee build.log
+          exit_code=${PIPESTATUS[0]}
           if [ $exit_code -ne 0 ]; then
             echo "===== 多线程编译失败(exit=$exit_code)，切换到单线程 V=sc 详细模式 ====="
-            make -j1 V=sc > build-single.log 2>&1
-            echo "status=failed" >> $GITHUB_OUTPUT
-            # 打印最后 50 行错误日志方便排查
+            make -j1 V=sc 2>&1 | tee build-single.log
+            vsc_exit=${PIPESTATUS[0]}
+            echo "===== 单线程退出码: $vsc_exit ====="
             echo "===== 最后 80 行错误日志 ====="
             tail -80 build-single.log 2>/dev/null || tail -80 build.log
             echo "====="
+            echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
           echo "status=success" >> $GITHUB_OUTPUT
