@@ -152,6 +152,10 @@ jobs:
         run: |
           make defconfig
           echo "✅ .config 依赖已补全"
+          # 检查设备是否在配置中
+          echo "--- 设备配置检查 ---"
+          grep -E "CONFIG_TARGET|CONFIG_DEVICE" .config | head -20
+          echo "---"
         working-directory: ./openwrt
 
       # ----------------------------------------------------------
