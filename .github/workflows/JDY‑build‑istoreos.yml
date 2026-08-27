@@ -191,31 +191,25 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          echo "===== 当前目录: $(pwd) ====="
-          echo "===== 开始编译 ====="
-          # 多线程编译
-          make -j$(nproc) 2>&1 | tee build.log
-          # 检查 build.log 是否存在
-          echo "===== 检查 build.log ====="
-          ls -la build.log 2>&1
-          echo "===== build.log 大小: $(wc -c < build.log 2>/dev/null) bytes ====="
-          # 打印最后 80 行日志
-          echo "========== build.log 最后 80 行 =========="
-          tail -80 build.log
-          echo "=========================================="
-          # 检查固件是否生成（最可靠的判断方式）
-          echo "===== 检查固件文件 ====="
-          ls -la bin/targets/ramips/mt7621/ 2>&1
+          # 直接单线程 V=sc 详细模式编译，避开管道和错误码问题
+          echo "===== 开始编译（单线程 V=sc 详细模式）====="
+          make -j1 V=sc 2>&1
+          # 检查退出码
+          exit_code=$?
+          echo "===== make 退出码: $exit_code ====="
+          if [ $exit_code -ne 0 ]; then
+            echo "❌ 编译失败 (exit=$exit_code)"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          # 检查固件是否生成
           firmware_count=$(ls -1 bin/targets/ramips/mt7621/*squashfs* 2>/dev/null | wc -l)
+          echo "===== 固件文件数: $firmware_count ====="
           if [ "$firmware_count" -gt 0 ]; then
-            echo "✅ 固件已生成！共 $firmware_count 个文件"
+            echo "✅ 编译成功！"
             echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ 固件未生成，切换到单线程 V=sc 详细模式"
-            make -j1 V=sc 2>&1 | tee build-single.log
-            echo "========== build-single.log 最后 80 行 =========="
-            tail -80 build-single.log
-            echo "================================================"
+            echo "❌ 固件未生成"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
