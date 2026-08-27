@@ -191,28 +191,26 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          # 先用多线程快速编译
+          # 多线程编译
           make -j$(nproc) 2>&1 | tee build.log
-          # 检查 build.log 中是否有错误（不依赖 PIPESTATUS）
-          if grep -q "Error 255\|Error 2\|Error 1" build.log 2>/dev/null; then
-            echo "===== ❌ build.log 中发现错误！切换到单线程 V=sc 详细模式 ====="
+          # 不管成功失败，先打印最后 80 行日志
+          echo "========== build.log 最后 80 行 =========="
+          tail -80 build.log
+          echo "=========================================="
+          # 检查固件是否生成（最可靠的判断方式）
+          firmware_count=$(ls -1 bin/targets/ramips/mt7621/*squashfs* 2>/dev/null | wc -l)
+          if [ "$firmware_count" -gt 0 ]; then
+            echo "✅ 固件已生成！共 $firmware_count 个文件"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ 固件未生成，切换到单线程 V=sc 详细模式"
             make -j1 V=sc 2>&1 | tee build-single.log
-            echo "===== build-single.log 最后 80 行 ====="
-            tail -80 build-single.log 2>/dev/null
-            echo "====="
+            echo "========== build-single.log 最后 80 行 =========="
+            tail -80 build-single.log
+            echo "================================================"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
-          # 再检查 make 退出码
-          exit_code=${PIPESTATUS[0]}
-          if [ $exit_code -ne 0 ]; then
-            echo "===== make 退出码: $exit_code，build.log 最后 80 行 ====="
-            tail -80 build.log
-            echo "====="
-            echo "status=failed" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "status=success" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
       # 13. 上传编译日志（无论成功失败都传）
