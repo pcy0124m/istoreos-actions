@@ -191,14 +191,16 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          # 直接单线程 V=sc 详细模式编译，避开管道和错误码问题
-          echo "===== 开始编译（单线程 V=sc 详细模式）====="
-          make -j1 V=sc 2>&1
-          # 检查退出码
-          exit_code=$?
+          # 单线程 V=s 编译，输出到文件（V=sc 太 verbose 日志被截断）
+          echo "===== 开始编译（单线程 V=s）====="
+          make -j1 V=s 2>&1 | tee build.log
+          exit_code=${PIPESTATUS[0]}
           echo "===== make 退出码: $exit_code ====="
+          echo "========== build.log 最后 80 行 =========="
+          tail -80 build.log
+          echo "=========================================="
           if [ $exit_code -ne 0 ]; then
-            echo "❌ 编译失败 (exit=$exit_code)"
+            echo "❌ 编译失败"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
