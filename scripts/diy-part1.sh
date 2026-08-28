@@ -26,16 +26,33 @@ DEVICE_EOF
 fi
 
 # ============================================================
-# 添加 DTS（设备树）文件（从 OpenWrt 下载）
+# 添加 DTS（设备树）文件
+# 注意：必须使用 openwrt-24.10 分支，匹配 iStoreOS 24.10 内核！
+# main 分支的 DTS 可能包含新特性导致兼容性问题
 # ============================================================
 DTS_DIR="openwrt/target/linux/ramips/dts"
+DTS_URL_BASE="https://raw.githubusercontent.com/openwrt/openwrt/openwrt-24.10/target/linux/ramips/dts"
+
+# 下载主 DTS 文件
 if [ ! -f "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dts" ]; then
   echo "===== 下载 jdcloud_re-sp-01b DTS 文件 ====="
-  # 下载 .dts 文件
-  curl -sL "https://raw.githubusercontent.com/openwrt/openwrt/main/target/linux/ramips/dts/mt7621_jdcloud_re-sp-01b.dts" -o "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dts"
-  # 下载 .dtsi 文件（设备硬件定义）
-  curl -sL "https://raw.githubusercontent.com/openwrt/openwrt/main/target/linux/ramips/dts/mt7621_jdcloud_re-sp-01b.dtsi" -o "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dtsi"
-  echo "DTS 文件已下载"
+  curl -sfL "$DTS_URL_BASE/mt7621_jdcloud_re-sp-01b.dts" -o "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dts"
+  if [ $? -ne 0 ] || [ ! -s "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dts" ]; then
+    echo "❌ DTS 下载失败！"
+    exit 1
+  fi
+  echo "DTS 主文件已下载"
+fi
+
+# 下载 DTSI 文件（设备硬件定义，如果存在）
+if [ ! -f "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dtsi" ]; then
+  curl -sfL "$DTS_URL_BASE/mt7621_jdcloud_re-sp-01b.dtsi" -o "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dtsi" 2>/dev/null
+  if [ $? -eq 0 ] && [ -s "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dtsi" ]; then
+    echo "DTSI 文件已下载"
+  else
+    echo "⚠️ 无 DTSI 文件（正常，有些设备没有独立的 dtsi）"
+    rm -f "$DTS_DIR/mt7621_jdcloud_re-sp-01b.dtsi" 2>/dev/null
+  fi
 fi
 
 # 添加 iStoreOS 第三方软件源到 feeds.conf.default

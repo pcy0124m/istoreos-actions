@@ -152,31 +152,28 @@ jobs:
         run: |
           make defconfig
           echo "✅ .config 依赖已补全"
-          # 检查设备是否在配置中
+          # 关键！验证设备是否正确选择了
           echo "--- 设备配置检查 ---"
-          grep -E "CONFIG_TARGET|CONFIG_DEVICE" .config | head -20
+          grep -E "CONFIG_TARGET_ramips_mt7621_DEVICE" .config
           echo "---"
+          # 如果设备不是 jdcloud_re-sp-01b，说明设备定义没生效，直接报错
+          if ! grep -q "CONFIG_TARGET_ramips_mt7621_DEVICE_jdcloud_re-sp-01b=y" .config; then
+            echo "❌ 设备未正确设置为 jdcloud_re-sp-01b！请检查设备定义是否已添加"
+            echo "--- .config 中实际的设备 ---"
+            grep "CONFIG_TARGET_ramips_mt7621_DEVICE" .config || echo "(无)"
+            exit 1
+          fi
+          echo "✅ 设备已正确设置为 jdcloud_re-sp-01b"
         working-directory: ./openwrt
 
       # ----------------------------------------------------------
-      # 10. 缓存 dl 目录（加速后续编译）
-      # ----------------------------------------------------------
-      - name: Cache dl
-        uses: actions/cache@v4
-        with:
-          path: openwrt/dl
-          key: dl-${{ hashFiles('openwrt/.config') }}
-          restore-keys: |
-            dl-
-
-      # ----------------------------------------------------------
-      # 11. 下载软件包（阿里云镜像加速 + 重试 + 不完整文件清理）
+      # 10. 下载软件包（不用缓存，避免陈旧包混入错误架构）
       # ----------------------------------------------------------
       - name: Download source
         id: download
         run: |
           cd openwrt
-          # 阿里云镜像已在 .config 中配置为 CONFIG_MIRROR，自动加速下载
+          # 不使用缓存，确保下载的包和当前配置匹配
           make download -j$(nproc) || make download -j1 V=s
           # 清理小于 1KB 的不完整文件，重新下载
           find dl -size -1024c -exec ls -la {} \;
@@ -185,13 +182,12 @@ jobs:
           echo "dl_ready=true" >> $GITHUB_OUTPUT
 
       # ----------------------------------------------------------
-      # 12. 编译固件
+      # 11. 编译固件
       # ----------------------------------------------------------
       - name: Compile firmware
         id: compile
         run: |
           cd openwrt
-          # 单线程 V=s 编译，输出到文件（V=sc 太 verbose 日志被截断）
           echo "===== 开始编译（单线程 V=s）====="
           make -j1 V=s 2>&1 | tee build.log
           exit_code=${PIPESTATUS[0]}
@@ -207,17 +203,27 @@ jobs:
           # 检查固件是否生成
           firmware_count=$(ls -1 bin/targets/ramips/mt7621/*squashfs* 2>/dev/null | wc -l)
           echo "===== 固件文件数: $firmware_count ====="
-          if [ "$firmware_count" -gt 0 ]; then
-            echo "✅ 编译成功！"
+          if [ "$firmware_count" -eq 0 ]; then
+            echo "❌ 固件未生成"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          # 关键！验证固件文件名包含 jdcloud，而非 adslr_g7 默认设备
+          echo "===== 固件文件名检查 ====="
+          ls -la bin/targets/ramips/mt7621/*squashfs* 2>/dev/null
+          if ls bin/targets/ramips/mt7621/*jdcloud*squashfs* 1>/dev/null 2>&1; then
+            echo "✅ 固件为 jdcloud_re-sp-01b 设备"
             echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ 固件未生成"
+            echo "❌❌❌ 固件不是 jdcloud_re-sp-01b！"
+            echo "--- 实际生成的设备 ---"
+            ls bin/targets/ramips/mt7621/*.bin | head -5
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
 
       # ----------------------------------------------------------
-      # 13. 上传编译日志（无论成功失败都传）
+      # 12. 上传编译日志（无论成功失败都传）
       # ----------------------------------------------------------
       - name: Upload build logs
         if: always()
@@ -230,7 +236,7 @@ jobs:
           retention-days: 30
 
       # ----------------------------------------------------------
-      # 14. 上传固件（仅编译成功时）
+      # 13. 上传固件（仅编译成功时）
       # ----------------------------------------------------------
       - name: Upload firmware
         uses: actions/upload-artifact@v4
@@ -241,7 +247,7 @@ jobs:
           retention-days: 90
 
       # ----------------------------------------------------------
-      # 15. SSH 远程调试（手动触发时启用）
+      # 14. SSH 远程调试（手动触发时启用）
       # ----------------------------------------------------------
       - name: Setup SSH debug
         uses: mxschmitt/action-tmate@v3
