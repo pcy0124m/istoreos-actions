@@ -2,10 +2,12 @@
 chmod +x $GITHUB_WORKSPACE/scripts/diy-part1.sh
 chmod +x $GITHUB_WORKSPACE/scripts/diy-part2.sh
 
-# github源镜像加速，解决Action网络超时（进入 openwrt 目录操作）
-sed -i 's#https://github.com#https://ghproxy.com/https://github.com#g' openwrt/feeds.conf.default
+# 注意：GitHub Actions runner 在美国，不需要 ghproxy 代理
+# ghproxy 反而可能返回错误缓存导致包架构不兼容
+# 原来的：
+# sed -i 's#https://github.com#https://ghproxy.com/https://github.com#g' openwrt/feeds.conf.default
 
-# 添加 iStoreOS 第三方软件源到 feeds.conf.default（替代 src-include，兼容性更好）
+# 添加 iStoreOS 第三方软件源到 feeds.conf.default
 cat >> openwrt/feeds.conf.default << EOF
 src-git third_party https://github.com/linkease/istore-packages.git;main
 src-git diskman https://github.com/jjm2473/luci-app-diskman.git;dev

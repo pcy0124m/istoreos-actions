@@ -99,13 +99,13 @@ jobs:
       # ----------------------------------------------------------
       - name: Copy config & apply mirrors
         run: |
-          # 复制 .config（如果存在），并追加阿里云下载镜像
+          # 复制 .config（如果存在）
           if [ -f "./${{ env.CONFIG_FILE }}" ]; then
             cp -f ./${{ env.CONFIG_FILE }} ./openwrt/.config
           else
             echo "⚠️ 未找到 ${{ env.CONFIG_FILE }}，将使用 iStoreOS 默认配置"
           fi
-          echo "CONFIG_MIRROR=\"${{ env.ALIYUN_MIRROR }}\"" >> ./openwrt/.config
+          # 注意：不加 CONFIG_MIRROR，避免混入错误架构的预编译包
         working-directory: ./
 
       # ----------------------------------------------------------
