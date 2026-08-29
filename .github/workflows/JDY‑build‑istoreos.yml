@@ -4,6 +4,9 @@
 # ============================================================
 name: Build iStoreOS 24.10 for JDCloud RE-SP-01B
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -253,3 +256,28 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event.inputs.ssh == 'true' }}
         timeout-minutes: 30
+
+      # ----------------------------------------------------------
+      # 15. 生成 Release 标签名（如果编译成功）
+      # ----------------------------------------------------------
+      - name: Generate release tag
+        id: release_tag
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          echo "tag=$(date +%Y.%m.%d-%H%M)" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------
+      # 16. 上传固件到 GitHub Release（如果编译成功）
+      # ----------------------------------------------------------
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: steps.release_tag.outputs.tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: "iStoreOS 24.10 - JDCloud RE-SP-01B"
+          files: |
+            openwrt/bin/targets/ramips/mt7621/*jdcloud*squashfs*.bin
+            openwrt/bin/targets/ramips/mt7621/*jdcloud*initramfs*.bin
+            openwrt/bin/targets/ramips/mt7621/*jdcloud*factory*.bin
