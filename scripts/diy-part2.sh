@@ -12,40 +12,88 @@ DEFAULT_IP="${LAN_IP:-192.168.12.1}"
 echo "LAN_IP=${DEFAULT_IP}, OS_NAME=${OS_NAME:-iStore OS}"
 
 # ============================================================
-# ★★★ 核心修复：为 jdcloud,re-sp-01b 创建 DSA 网络配置
+# ★★★ 核心修复 1：修改 board.d/02_network
 #
-# RE-SP-01B 硬件结构：
-#   - LAN 口: 通过 MT7530 DSA 交换机（port@1=lan1, port@2=lan2）
-#   - WAN 口: 通过 gmac1 直连 ethphy0（DTS label=wan）
-#   - CPU→Switch: port@6 通过 gmac0 RGMII 连接
+# 问题：iStoreOS 官方没有 jdcloud,re-sp-01b，导致掉进
+#       默认分支 *)，生成 "lan1 lan2 lan3 lan4" 四个 LAN 口的
+#       配置。但 RE-SP-01B 只有 lan1/lan2 两个口（DSA），
+#       lan3/lan4 不存在，桥接配置全部失败。
 #
-# 问题：iStoreOS 官方无此设备定义，编译出的固件没有
-#       正确的 board.d/02_network 条目，导致 /etc/config/network
-#       不会自动桥接 lan1+lan2 为 br-lan，LAN 口全死。
-#
-# 修复：注入 uci-defaults 脚本，首次启动时强制写入正确配置。
+# 修复：用 awk 把设备条目精确插到 *) 之前。
 # ============================================================
-echo "===== 创建 DSA 网络 uci-defaults ====="
+echo "===== [FIX-1] 修改 board.d/02_network ====="
+
+BOARD_D_FILE="target/linux/ramips/mt7621/base-files/etc/board.d/02_network"
+
+if [ -f "$BOARD_D_FILE" ]; then
+  if grep -q "jdcloud,re-sp-01b" "$BOARD_D_FILE"; then
+    echo "  ℹ️ 已存在，跳过"
+  else
+    # 用 awk 在第一个 *) 之前插入设备条目
+    awk '
+    !inserted && /^[[:space:]]*\*\)/ {
+      print "\tjdcloud,re-sp-01b)"
+      print "\t\tucidef_set_interfaces_lan_wan \"lan1 lan2\" \"wan\""
+      print "\t\t;;"
+      inserted=1
+    }
+    { print }
+    ' "$BOARD_D_FILE" > "${BOARD_D_FILE}.patched" && mv "${BOARD_D_FILE}.patched" "$BOARD_D_FILE"
+    chmod +x "$BOARD_D_FILE" 2>/dev/null
+    echo "  ✅ board.d/02_network 已插入 jdcloud,re-sp-01b"
+    # 验证
+    grep -A2 "jdcloud,re-sp-01b" "$BOARD_D_FILE"
+  fi
+else
+  # 尝试其他可能路径
+  ALT_BOARD_D="target/linux/ramips/base-files/etc/board.d/02_network"
+  if [ -f "$ALT_BOARD_D" ]; then
+    awk '
+    !inserted && /^[[:space:]]*\*\)/ {
+      print "\tjdcloud,re-sp-01b)"
+      print "\t\tucidef_set_interfaces_lan_wan \"lan1 lan2\" \"wan\""
+      print "\t\t;;"
+      inserted=1
+    }
+    { print }
+    ' "$ALT_BOARD_D" > "${ALT_BOARD_D}.patched" && mv "${ALT_BOARD_D}.patched" "$ALT_BOARD_D"
+    echo "  ✅ board.d (alt path) 已插入"
+  else
+    echo "  ⚠️ 未找到 board.d 文件！"
+    echo "  尝试路径: $BOARD_D_FILE"
+    ls -la target/linux/ramips/ 2>/dev/null || echo "  ramips 目录不存在"
+  fi
+fi
+
+# ============================================================
+# ★★★ 核心修复 2：创建 uci-defaults 网络配置（双保险）
+#
+# 在首次启动时运行，删除 config_generate 生成的错误配置，
+# 写入正确的 DSA 桥接。
+# ============================================================
+echo "===== [FIX-2] 创建 uci-defaults 网络脚本 ====="
 
 mkdir -p files/etc/uci-defaults
 
-# 写入 uci-defaults 脚本（注意：外层 heredoc 用 'EOF' 防止变量展开）
-cat > files/etc/uci-defaults/99-network-re-sp-01b << 'EOF_SCRIPT'
+cat > files/etc/uci-defaults/99-network-fix-re-sp-01b << 'EOF_NET'
 #!/bin/sh
-# RE-SP-01B DSA 网络配置 — 首次启动时运行
-# 只针对此设备
-BOARD_NAME=$(cat /tmp/sysinfo/board_name 2>/dev/null)
-[ "$BOARD_NAME" = "jdcloud,re-sp-01b" ] || exit 0
+# RE-SP-01B DSA 网络修正（首次启动执行一次）
+# 固件本身就是为此设备编译的，无需检查 board_name
 
-echo "[99-network] Configuring DSA network for JDCloud RE-SP-01B..."
+echo "[99-network] Fixing DSA network for JDCloud RE-SP-01B..."
 
-# 删除 config_generate 可能生成的默认（不正确的）配置
+# 记录当前网络状态用于调试
+echo "--- BEFORE fix ---" > /root/net-debug.log 2>&1
+ip link show >> /root/net-debug.log 2>&1
+cat /etc/config/network >> /root/net-debug.log 2>&1
+
+# 清除所有可能错误的默认配置
 uci -q delete network.br_lan
 uci -q delete network.lan
 uci -q delete network.wan
 uci -q delete network.wan6
 
-# 创建 DSA 桥接设备：br-lan 包含 lan1 + lan2
+# 创建 DSA 桥接设备：br-lan = lan1 + lan2
 uci set network.br_lan=device
 uci set network.br_lan.name='br-lan'
 uci set network.br_lan.type='bridge'
@@ -59,7 +107,7 @@ uci set network.lan.proto='static'
 uci set network.lan.ipaddr='DEFAULT_LAN_IP'
 uci set network.lan.netmask='255.255.255.0'
 
-# WAN 接口（DTS 中 gmac1 label=wan）
+# WAN 接口（DTS: gmac1 label=wan）
 uci set network.wan=interface
 uci set network.wan.device='wan'
 uci set network.wan.proto='dhcp'
@@ -70,42 +118,22 @@ uci set network.wan6.device='wan'
 uci set network.wan6.proto='dhcpv6'
 
 uci commit network
-echo "[99-network] Done: br-lan(lan1+lan2) ip=DEFAULT_LAN_IP, wan=dhcp"
-EOF_SCRIPT
 
-chmod +x files/etc/uci-defaults/99-network-re-sp-01b
+# 记录修正后状态
+echo "--- AFTER fix ---" >> /root/net-debug.log 2>&1
+cat /etc/config/network >> /root/net-debug.log 2>&1
 
-# 用实际 IP 替换占位符
-sed -i "s/DEFAULT_LAN_IP/${DEFAULT_IP}/g" files/etc/uci-defaults/99-network-re-sp-01b
-echo "✅ uci-defaults 已创建 (LAN IP: ${DEFAULT_IP})"
+# 重启网络使配置生效
+/etc/init.d/network restart
 
-# ============================================================
-# board.d 补丁（双保险）
-# 如果 iStoreOS 源码有 ramips mt7621 的 board.d 目录，
-# 在 02_network 中追加设备条目
-# ============================================================
-echo "===== 检查 board.d 补丁 ====="
+echo "[99-network] Done. LAN=br-lan(lan1+lan2)@DEFAULT_LAN_IP, WAN=dhcp"
+EOF_NET
 
-BOARD_D_FILE="target/linux/ramips/mt7621/base-files/etc/board.d/02_network"
-if [ -f "$BOARD_D_FILE" ]; then
-  if ! grep -q "jdcloud,re-sp-01b" "$BOARD_D_FILE"; then
-    sed -i '/^\tesac$/i\\tjdcloud,re-sp-01b)\n\t\tucidef_set_interfaces_lan_wan "lan1 lan2" "wan"\n\t\t;;' "$BOARD_D_FILE"
-    echo "✅ board.d/02_network 已添加设备条目"
-  else
-    echo "ℹ️ board.d 已有该设备配置，跳过"
-  fi
-else
-  # iStoreOS 可能使用不同路径
-  ALT_BOARD_D="target/linux/ramips/base-files/etc/board.d/02_network"
-  if [ -f "$ALT_BOARD_D" ]; then
-    if ! grep -q "jdcloud,re-sp-01b" "$ALT_BOARD_D"; then
-      sed -i '/^\tesac$/i\\tjdcloud,re-sp-01b)\n\t\tucidef_set_interfaces_lan_wan "lan1 lan2" "wan"\n\t\t;;' "$ALT_BOARD_D"
-      echo "✅ board.d (alt path) 已添加设备条目"
-    fi
-  else
-    echo "⚠️ 未找到 board.d 文件，跳过（uci-defaults 仍然生效）"
-  fi
-fi
+chmod +x files/etc/uci-defaults/99-network-fix-re-sp-01b
+
+# 替换 IP 占位符
+sed -i "s/DEFAULT_LAN_IP/${DEFAULT_IP}/g" files/etc/uci-defaults/99-network-fix-re-sp-01b
+echo "  ✅ uci-defaults 已创建 (LAN IP: ${DEFAULT_IP})"
 
 # ============================================================
 # 自定义系统名称
@@ -115,13 +143,6 @@ if [ -n "${OS_NAME}" ]; then
   echo "✅ 系统名称: ${OS_NAME}"
 fi
 
-# ============================================================
-# WiFi
-# ============================================================
-if [ "$ENABLE_WIFI" = "true" ]; then
-  echo "✅ WiFi 已启用"
-else
-  echo "⏭️ WiFi 未启用"
-fi
-
-echo "✅ DIY Part2 完成！"
+echo "✅ DIY Part2 全部完成！"
+echo "  FIX-1: board.d/02_network 设备条目"
+echo "  FIX-2: uci-defaults DSA 桥接覆写"
